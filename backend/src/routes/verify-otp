@@ -1,0 +1,21 @@
+router.post('/verify-otp', async (req, res) => {
+  const { orderId, otpEntered } = req.body;
+
+  const order = await prisma.order.findUnique({ where: { id: orderId } });
+
+  if (!order || order.otpCode !== otpEntered) {
+    return res.status(400).json({ message: "Mã OTP không đúng!" });
+  }
+
+  if (new Date() > order.otpExpires) {
+    return res.status(400).json({ message: "Mã OTP đã hết hạn!" });
+  }
+
+  // Nếu mọi thứ OK, cập nhật đơn hàng thành Đã xác nhận
+  await prisma.order.update({
+    where: { id: orderId },
+    data: { isVerified: true, otpCode: null } // Xóa mã cũ đi cho an toàn
+  });
+
+  res.json({ message: "Xác thực thành công! Đơn hàng đang được chuẩn bị." });
+});

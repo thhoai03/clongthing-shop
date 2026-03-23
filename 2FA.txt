@@ -1,0 +1,10 @@
+- Tạo mã (Generation): Sử dụng thư viện crypto vì nó an toàn hơn Math.random của Node.js để tạo số ngẫu nhiên 6 chữ số. backend/sr/routes/oder.js
+- Lưu trữ & Thời hạn (Storage & TTL): Mã OTP được lưu vào Database kèm theo cột otpExpires ( thời gian sống nó là 5p) có thể ngăn chặn Brute-force oder.js
+- Truyền tải (Transmission): Dùng giao thức SMTP qua thư viện nodemailer để gửi mã về Gmail của khách.
+- Đối soát (Verification): Khi khách nhập mã, Backend sẽ so sánh mã người dùng gửi lên với mã trong DB và kiểm tra xem đã hết hạn chưa. order.js (verify)
+* backend
+- JWT (JSON Web Token): Khi đăng nhập, Backend cấp một "thẻ bài" JWT. Mọi yêu cầu sau đó phải đính kèm thẻ này ở Header. authMiddleware.js
+- Middleware verifyAdmin: Đây là "người gác cổng". Nó giải mã JWT để kiểm tra trường role. Nếu không phải ADMIN, nó sẽ trả về lỗi 403 Forbidden.
+	$$\text{Access} = (\text{Valid Token}) \land (\text{Role} == \text{'ADMIN'})$$
+- AdminRoute: e đã dùng một "Hàng rào" bọc quanh các trang nhạy cảm. Nếu người dùng cố tình gõ link /admin/orders lên trình duyệt, React sẽ kiểm tra LocalStorage và đá họ về trang chủ ngay lập tức.
+- Conditional Rendering: Chỉ hiển thị nút "Quản lý" khi và chỉ khi role === 'ADMIN'

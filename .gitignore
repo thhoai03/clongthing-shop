@@ -1,0 +1,9 @@
+# Tránh push thư mục node_modules
+node_modules/
+dist/
+build/
+.env
+
+# Các file rác của hệ điều hành
+.DS_Store
+Thumbs.db

@@ -1,0 +1,126 @@
+// backend/prisma/schema.prisma
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+// Sử dụng PostgreSQL (Neon Cloud)
+datasource db {
+  provider = "postgresql" 
+  url      = env("DATABASE_URL")
+}
+
+// --- 1. BẢNG NGƯỜI DÙNG (Quản lý Xác thực & Phân quyền) ---
+model User {
+  id                  Int       @id @default(autoincrement())
+  email               String    @unique
+  passwordHash        String    // Chỉ lưu chuỗi đã băm (hashed), không lưu plaintext
+  role                Role      @default(USER) // Dùng Enum để chặn lỗi sai chính tả
+  otpCode             String?  // Lưu mã OTP tạm thời
+  otpExpires          DateTime? // Thời gian hết hạn mã
+  isVerified          Boolean  @default(false) // Mặc định là chưa xác thực
+
+  // Bảo mật 2 lớp (2FA) 
+  isTwoFactorEnabled  Boolean   @default(false)
+  twoFactorSecret     String?   
+  
+  orders              Order[]   // Lịch sử mua hàng 
+  favorites           Favorite[] // Danh sách yêu thích
+  
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+}
+
+// Định nghĩa các Quyền hợp lệ
+enum Role {
+  USER
+  ADMIN
+}
+
+// --- 2. BẢNG SẢN PHẨM ---
+model Product {
+  id          Int         @id @default(autoincrement())
+  name        String
+  description String?     @db.Text
+  price       Float       
+  stock       Int         @default(0) // Quản lý tồn kho để tránh lỗi khách mua khi đã hết hàng
+  imageUrl    String?     
+  
+  orderItems  OrderItem[]
+  favoritedBy Favorite[]
+  
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+}
+
+// --- 3. BẢNG DANH SÁCH YÊU THÍCH (Chỉ dành cho user đã đăng nhập) ---
+model Favorite {
+  id        Int      @id @default(autoincrement())
+  
+  userId    Int
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  productId Int
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  // BẢO MẬT/CHỐNG LỖI: Đảm bảo 1 user chỉ có thể yêu thích 1 sản phẩm 1 lần
+  @@unique([userId, productId]) 
+}
+
+// --- 4. BẢNG ĐƠN HÀNG 
+model Order {
+  id             String      @id @default(uuid()) // Dùng UUID mã hóa ID đơn hàng để người ngoài không đoán được số lượng đơn
+  
+  // Lưu cứng thông tin khách hàng vào đơn, đề phòng trường hợp User xóa tài khoản
+  customerName   String
+  customerPhone  String
+  customerAddress String
+  
+  totalAmount    Float
+  status         OrderStatus @default(PENDING)
+  
+  // Mối quan hệ tùy chọn (Optional): null nếu là khách vãng lai, có ID nếu đã đăng nhập
+  userId         Int?
+  user           User?       @relation(fields: [userId], references: [id], onDelete: SetNull)
+  
+  items          OrderItem[]
+  
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
+  otpCode      String?  // Lưu mã 6 số
+  otpExpires   DateTime? // Thời gian hết hạn
+  isVerified   Boolean  @default(false) // Đã xác thực OTP chưa
+}
+
+// Trạng thái đơn hàng chuẩn
+enum OrderStatus {
+  PENDING
+  PROCESSING
+  SHIPPED
+  DELIVERED
+  CANCELLED
+}
+// -- xem log --
+model SecurityLog {
+  id        String   @id @default(uuid())
+  action    String   // Ví dụ: "SEND_OTP", "VERIFY_SUCCESS", "VERIFY_FAILED"
+  email     String   // Email của người thực hiện
+  status    String   // "SUCCESS" hoặc "FAILED"
+  details   String?  // Ghi chú thêm (ví dụ: "Nhập sai mã", "Mã hết hạn")
+  createdAt DateTime @default(now())
+}
+// --- 5. BẢNG CHI TIẾT ĐƠN HÀNG ---
+model OrderItem {
+  id        Int     @id @default(autoincrement())
+  quantity  Int
+  price     Float   // LƯU Ý BẢO MẬT: Phải lưu giá tại thời điểm mua, không lấy từ bảng Product vì giá Product có thể thay đổi sau này
+  
+  orderId   String
+  order     Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  
+  productId Int
+  product   Product @relation(fields: [productId], references: [id], onDelete: Restrict) 
+  // onDelete: Restrict -> Ngăn Admin lỡ tay xóa sản phẩm nếu sản phẩm đó đã nằm trong đơn hàng của khách
+}
